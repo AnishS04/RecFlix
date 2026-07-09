@@ -12,13 +12,17 @@ A movie recommender system built on the MovieLens dataset, comparing a matrix fa
 
 Both models were evaluated on the same held-out test set of **6,444,332 ratings** — no rows dropped from either.
 
-| Model | Test RMSE |
-|---|---|
-| Popularity baseline | 0.9593 |
-| **Matrix factorization** | **0.8493** |
-| Improvement | **+0.1101 (11.5%)** |
+| Model                    | Test RMSE           |
+| ------------------------ | ------------------- |
+| Popularity baseline      | 0.9593              |
+| **Matrix factorization** | **0.8493**          |
+| Improvement              | **+0.1101 (11.5%)** |
 
 Training loss converged from 5.28 to 0.70 over 25 epochs.
+
+**The baseline** predicts each movie's mean rating from the training set, restricted to movies with at least 100 ratings. Movies below that threshold fall back to the global mean.
+
+**The split** is an 80/20 random partition of the filtered ratings (`random_state=42`), applied after the sparsity filter so both models see identical train and test sets.
 
 ---
 
@@ -36,7 +40,7 @@ The Streamlit app exposes three ways to use this:
 
 - **Recommend by user** — pick an existing user, score every movie they haven't rated, return the highest predictions.
 - **Find similar movies** — pick a movie, rank all others by cosine similarity of their learned embeddings. Movies that get rated similarly by similar people end up pointing in similar directions.
-- **Rate & recommend** — a new user rates a handful of movies. The app freezes every learned movie embedding and solves for just that person's taste vector via gradient descent, then recommends against it. This technique is called *fold-in*, and it's the standard way production systems handle new users without retraining.
+- **Rate & recommend** — a new user rates a handful of movies. The app freezes every learned movie embedding and solves for just that person's taste vector via gradient descent, then recommends against it. This technique is called _fold-in_, and it's the standard way production systems handle new users without retraining.
 
 ---
 
@@ -69,20 +73,24 @@ streamlit run app/app.py
 
 Pre-trained weights are hosted at [`AnishS04/recflix-mf-model`](https://huggingface.co/AnishS04/recflix-mf-model). `model_comparison.py` loads them automatically if present and only retrains from scratch if they're missing.
 
+Both `model_comparison.py` and the app must be run from the project root — they resolve `data/` and `mf_model.pt` relative to the working directory.
+
 ---
 
 ## Training configuration
 
-| Parameter | Value |
-|---|---|
-| Latent factors (`k`) | 50 |
-| Epochs | 25 |
-| Samples per epoch | 3,000,000 (resampled each epoch) |
-| Batch size | 32,768 |
-| Learning rate | 0.005 (Adam) |
-| Weight decay | 1e-5 |
+| Parameter            | Value                            |
+| -------------------- | -------------------------------- |
+| Latent factors (`k`) | 50                               |
+| Epochs               | 25                               |
+| Samples per epoch    | 3,000,000 (resampled each epoch) |
+| Batch size           | 32,768                           |
+| Learning rate        | 0.005 (Adam)                     |
+| Weight decay         | 1e-5                             |
 
 Rather than iterate over all 25M training rows every epoch, each epoch draws a fresh 3M-row sample. Across 25 epochs the model sees roughly 75M examples — broad coverage of the dataset without holding it all in memory at once.
+
+**Runtime:** roughly 20 minutes on CPU. No GPU required. Evaluation against the saved weights takes under two minutes, most of it spent loading and filtering the ratings file.
 
 ---
 
@@ -101,7 +109,7 @@ RecFlix/
 │   ├── evaluation.py           # RMSE for both models
 │   └── model_comparison.py     # Trains and benchmarks both
 ├── notebooks/
-│   └── eda.ipynb
+│   └── eda.ipynb               # Exploratory analysis of the ratings distribution
 ├── requirements.txt
 └── README.md
 ```
@@ -118,7 +126,7 @@ Filling unmatched movies with the global mean instead of dropping them puts both
 
 ## Known limitations
 
-**Cold start.** Matrix factorization only knows what it saw during training. It has no embedding for a user or a movie it has never encountered, and no way to construct one from scratch. The *Rate & Recommend* tab works around this on the user side via fold-in, but a movie outside the training set is genuinely out of reach — it would require content features (genre, cast, plot embeddings) and a different model architecture.
+**Cold start.** Matrix factorization only knows what it saw during training. It has no embedding for a user or a movie it has never encountered, and no way to construct one from scratch. The _Rate & Recommend_ tab works around this on the user side via fold-in, but a movie outside the training set is genuinely out of reach — it would require content features (genre, cast, plot embeddings) and a different model architecture.
 
 **Long-tail bias in top-N.** Because recommendations rank by predicted rating, obscure movies with few ratings can surface near the top: their movie-bias terms haven't been pulled toward the global mean by enough data. This is expected behavior for vanilla MF and is why production systems typically apply a minimum-ratings filter to the candidate pool before ranking.
 
